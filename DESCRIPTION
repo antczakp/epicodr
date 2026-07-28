@@ -43,7 +43,7 @@ License: MIT + file LICENSE
 URL: https://nukleus-ecu.github.io/epicodr/index.html
 BugReports: https://github.com/nukleus-ecu/epicodr/issues
 Depends: 
-    R (>= 3.4.0)
+    R (>= 3.5)
 Imports:
     tidyverse (>= 1.3.0),
     haven,
@@ -60,6 +60,8 @@ Imports:
     tidyselect,
     eq5d,
     labelled
+Suggests:
+    testthat (>= 3.0.0)
 Encoding: UTF-8
 LazyData: true
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
