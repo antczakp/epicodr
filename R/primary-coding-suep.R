@@ -1510,8 +1510,14 @@ primary_coding_suep <- function(trial_data) {
              warning("primary_coding_suep_recode_promis_social() did not work. This is likely due to missing variables.")
              print(e)})
   
+  ## Multidimensional Prognostic Index =========================================
+  tryCatch(expr = {trial_data <- primary_coding_suep_mpi(trial_data)},
+           error = function(e) {
+             warning("primary_coding_suep_mpi() did not work. This is likely due to missing variables.")
+             print(e)})
+
   catw("Primary Coding done")
-  
+
   return(trial_data)
 }
 

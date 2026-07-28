@@ -12,7 +12,7 @@ get_time_to_visits(trial_data, start = "Screening/Baselinevisite")
 \item{start}{visit which the symptoms and comorbidities are mapped to, default is "Screening/Baselinevisite"}
 }
 \description{
-add the following colums to esym:
+add the following columns to esym:
 inaccuracy, sym_main_date.date, time_diff
 }
 \details{
