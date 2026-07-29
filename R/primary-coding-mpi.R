@@ -250,6 +250,53 @@ mpi_fill_within_patient <- function(x, patient) {
 }
 
 
+#' Resolve the patient and visit ID column names
+#'
+#' Falls back to `set_id_names()` only when the caller did not name both IDs.
+#' Exports that ship without the secuTrial metadata tables cannot be read by
+#' `read_tsExport()` and therefore have no `export_options`, but they can still
+#' be scored by naming the two ID columns directly.
+#'
+#' @param trial_data A secuTrial data object or a named list of data frames.
+#' @param pid Column name of the patient ID, or NULL.
+#' @param visitid Column name of the visit ID, or NULL.
+#' @return List with the entries `pid` and `visitid`.
+#' @noRd
+mpi_resolve_ids <- function(trial_data, pid, visitid) {
+
+  if (!is.null(pid) && !is.null(visitid)) {
+    return(list(pid = pid, visitid = visitid))
+  }
+
+  # set_id_names() derives the ID names from export_options, so it can only run
+  # on an object that read_tsExport() produced.
+  if (!("id_names" %in% names(trial_data$export_options))) {
+    if ("data_names" %in% names(trial_data$export_options)) {
+      trial_data <- set_id_names(trial_data)
+    }
+  }
+
+  if (!("id_names" %in% names(trial_data$export_options))) {
+    stop(paste0(
+      "Could not determine the ID columns. This object has no ",
+      "\"export_options\", which happens when an export ships without the ",
+      "secuTrial metadata tables and was read outside read_tsExport(). ",
+      "Pass the columns directly, e.g. ",
+      "pid = \"export_psn\", visitid = \"mnpcvpid\"."
+    ))
+  }
+
+  list(
+    pid = if (is.null(pid)) trial_data$export_options$id_names$pid else pid,
+    visitid = if (is.null(visitid)) {
+      trial_data$export_options$id_names$visitid
+    } else {
+      visitid
+    }
+  )
+}
+
+
 # Visit table ------------------------------------------------------------------
 
 #' Default visit forms of a SUEP export
@@ -285,12 +332,9 @@ mpi_default_visit_forms <- function() {
 build_mpi_visit_df <- function(trial_data, pid = NULL, visitid = NULL,
                                visit_forms = mpi_default_visit_forms()) {
 
-  if (!("id_names" %in% names(trial_data$export_options))) {
-    trial_data <- set_id_names(trial_data)
-  }
-
-  if (is.null(pid)) pid <- trial_data$export_options$id_names$pid
-  if (is.null(visitid)) visitid <- trial_data$export_options$id_names$visitid
+  ids <- mpi_resolve_ids(trial_data, pid, visitid)
+  pid <- ids$pid
+  visitid <- ids$visitid
 
   carry <- c("mnpvisid", "mnpvislabel", "mnpvisno")
 
@@ -713,16 +757,9 @@ build_mpi_df <- function(trial_data, pid = NULL, visitid = NULL,
                          missing_values = epicodr::missing_values_default,
                          min_domains = 1) {
 
-  if (!("id_names" %in% names(trial_data$export_options))) {
-    trial_data <- set_id_names(trial_data)
-  }
-
-  if (!("id_names" %in% names(trial_data$export_options))) {
-    stop("No table named \"id_names\" in exportoptions. Did you use set_id_names()?")
-  }
-
-  if (is.null(pid)) pid <- trial_data$export_options$id_names$pid
-  if (is.null(visitid)) visitid <- trial_data$export_options$id_names$visitid
+  ids <- mpi_resolve_ids(trial_data, pid, visitid)
+  pid <- ids$pid
+  visitid <- ids$visitid
 
   unknown <- setdiff(domains$domain, scoring$domain)
   if (length(unknown) > 0) {
@@ -903,12 +940,9 @@ build_mpi_outcome_df <- function(trial_data, pid = NULL, visitid = NULL,
                                                       "12M Follow-Up"),
                                  ward_levels = 1:7) {
 
-  if (!("id_names" %in% names(trial_data$export_options))) {
-    trial_data <- set_id_names(trial_data)
-  }
-
-  if (is.null(pid)) pid <- trial_data$export_options$id_names$pid
-  if (is.null(visitid)) visitid <- trial_data$export_options$id_names$visitid
+  ids <- mpi_resolve_ids(trial_data, pid, visitid)
+  pid <- ids$pid
+  visitid <- ids$visitid
 
   if (is.null(visits)) {
     visits <- build_mpi_visit_df(trial_data, pid, visitid, visit_forms)
@@ -1083,12 +1117,9 @@ build_mpi_outcome_df <- function(trial_data, pid = NULL, visitid = NULL,
 mpi_variable_report <- function(trial_data, pid = NULL, visitid = NULL,
                                 domains = epicodr::mpi_domains) {
 
-  if (!("id_names" %in% names(trial_data$export_options))) {
-    trial_data <- set_id_names(trial_data)
-  }
-
-  if (is.null(pid)) pid <- trial_data$export_options$id_names$pid
-  if (is.null(visitid)) visitid <- trial_data$export_options$id_names$visitid
+  ids <- mpi_resolve_ids(trial_data, pid, visitid)
+  pid <- ids$pid
+  visitid <- ids$visitid
 
   rows <- lapply(seq_len(nrow(domains)), function(i) {
 
@@ -1161,22 +1192,18 @@ mpi_variable_report <- function(trial_data, pid = NULL, visitid = NULL,
 #' @param trial_data A secuTrial data object.
 #' @param outcomes Should the rehospitalisation and vital status table be
 #'   added?
+#' @param pid Column name of the patient ID in trial_data.
+#' @param visitid Column name of the visit ID in trial_data.
 #' @param ... Further arguments passed on to [build_mpi_df()].
 #'
 #' @return A secuTrial data object with the MPI tables added.
 #' @export
-primary_coding_suep_mpi <- function(trial_data, outcomes = TRUE, ...) {
+primary_coding_suep_mpi <- function(trial_data, outcomes = TRUE, pid = NULL,
+                                    visitid = NULL, ...) {
 
-  if (!("id_names" %in% names(trial_data$export_options))) {
-    trial_data <- set_id_names(trial_data)
-  }
-
-  if (!("id_names" %in% names(trial_data$export_options))) {
-    stop("No table named \"id_names\" in exportoptions. Did you use set_id_names()?")
-  }
-
-  pid <- trial_data$export_options$id_names$pid
-  visitid <- trial_data$export_options$id_names$visitid
+  ids <- mpi_resolve_ids(trial_data, pid, visitid)
+  pid <- ids$pid
+  visitid <- ids$visitid
 
   trial_data[["ecu_mpi"]] <- build_mpi_df(trial_data, pid, visitid, ...) %>%
     labelled::remove_var_label()

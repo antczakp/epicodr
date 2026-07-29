@@ -385,6 +385,37 @@ test_that("interval bounds are found by prefix when they are spelled apart", {
 })
 
 
+test_that("a plain list of tables works when both IDs are named", {
+
+  # Exports without the secuTrial metadata tables cannot go through
+  # read_tsExport(), so they arrive as a bare list of data frames read with
+  # read.csv2() and carry no export_options at all.
+  raw <- make_mpi_fixture()
+  raw$export_options <- NULL
+  raw <- unclass(raw)
+
+  expect_error(build_mpi_df(raw), "pid")
+
+  result <- suppressWarnings(
+    build_mpi_df(raw, pid = "export_psn", visitid = "mnpcvpid")
+  )
+  reference <- suppressWarnings(build_mpi_df(make_mpi_fixture()))
+
+  expect_equal(result, reference)
+
+  outcome <- suppressWarnings(
+    build_mpi_outcome_df(raw, pid = "export_psn", visitid = "mnpcvpid")
+  )
+  expect_equal(outcome,
+               suppressWarnings(build_mpi_outcome_df(make_mpi_fixture())))
+
+  report <- suppressWarnings(
+    mpi_variable_report(raw, pid = "export_psn", visitid = "mnpcvpid")
+  )
+  expect_equal(nrow(report), nrow(epicodr::mpi_domains))
+})
+
+
 test_that("mpi_variable_report() shows how each variable is matched", {
 
   report <- suppressWarnings(mpi_variable_report(make_mpi_fixture()))

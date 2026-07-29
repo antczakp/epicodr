@@ -4,13 +4,23 @@
 \alias{primary_coding_suep_mpi}
 \title{Primary coding Multidimensional Prognostic Index (MPI)}
 \usage{
-primary_coding_suep_mpi(trial_data, outcomes = TRUE, ...)
+primary_coding_suep_mpi(
+  trial_data,
+  outcomes = TRUE,
+  pid = NULL,
+  visitid = NULL,
+  ...
+)
 }
 \arguments{
 \item{trial_data}{A secuTrial data object.}
 
 \item{outcomes}{Should the rehospitalisation and vital status table be
 added?}
+
+\item{pid}{Column name of the patient ID in trial_data.}
+
+\item{visitid}{Column name of the visit ID in trial_data.}
 
 \item{...}{Further arguments passed on to [build_mpi_df()].}
 }
