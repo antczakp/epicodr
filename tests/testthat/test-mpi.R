@@ -385,6 +385,51 @@ test_that("interval bounds are found by prefix when they are spelled apart", {
 })
 
 
+test_that("primary_coding_suep_mpi() attaches the MPI tables to the object", {
+
+  # The intended workflow: read_tsExport() -> primary_coding_suep() ->
+  # primary_coding_suep_mpi(), attaching tables to the object the same way
+  # primary_coding_suep_pcs_score() attaches ecu_pcs_score.
+  trial_data <- suppressWarnings(primary_coding_suep_mpi(make_mpi_fixture()))
+
+  expect_s3_class(trial_data, "tsExportdata")
+  expect_true(all(c("ecu_mpi", "ecu_mpi_outcome") %in% names(trial_data)))
+
+  expect_equal(nrow(trial_data$ecu_mpi), 6)
+  expect_true("ecu_mpi" %in% names(trial_data$ecu_mpi))
+  expect_true("ecu_rehosp" %in% names(trial_data$ecu_mpi_outcome))
+
+  # The tables that were already in the object are left alone.
+  expect_true(all(c("m", "fv2_1", "ehome", "emed_oth", "eward") %in%
+                    names(trial_data)))
+  expect_equal(trial_data$m, make_mpi_fixture()$m)
+
+  # IDs are still taken from export_options when they are not named.
+  expect_true("export_psn" %in% names(trial_data$ecu_mpi))
+})
+
+
+test_that("primary_coding_suep_mpi() can skip the outcome table", {
+
+  trial_data <- suppressWarnings(
+    primary_coding_suep_mpi(make_mpi_fixture(), outcomes = FALSE)
+  )
+
+  expect_true("ecu_mpi" %in% names(trial_data))
+  expect_false("ecu_mpi_outcome" %in% names(trial_data))
+})
+
+
+test_that("primary_coding_suep_mpi() passes options on to build_mpi_df()", {
+
+  trial_data <- suppressWarnings(
+    primary_coding_suep_mpi(make_mpi_fixture(), min_domains = 8)
+  )
+
+  expect_true(all(is.na(trial_data$ecu_mpi$ecu_mpi)))
+})
+
+
 test_that("a plain list of tables works when both IDs are named", {
 
   # Exports without the secuTrial metadata tables cannot go through
