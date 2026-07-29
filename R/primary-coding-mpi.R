@@ -580,6 +580,12 @@ mpi_collect_domain <- function(trial_data, domain_config, visits, pid, visitid,
     return(NULL)
   }
 
+  # Read every variable of the domain as a numeric code, the way the original
+  # script applied as.numeric() across the whole domain before summing. Doing
+  # it here rather than in each collector means a variable cannot reach the
+  # scoring rules still carrying labels.
+  collected <- lapply(collected, mpi_as_numeric)
+
   return(as.data.frame(collected, stringsAsFactors = FALSE))
 }
 
@@ -624,7 +630,9 @@ mpi_parse_band <- function(x) {
 #' @noRd
 mpi_score_sum <- function(values, cuts) {
 
-  values <- as.matrix(values)
+  # Guard the sum against a column that still carries labels: as.matrix() on a
+  # frame with one non-numeric column turns every column into character.
+  values <- as.matrix(as.data.frame(lapply(values, mpi_as_numeric)))
   observed <- rowSums(!is.na(values))
   total <- rowSums(values, na.rm = TRUE)
 
