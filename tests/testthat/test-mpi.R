@@ -68,6 +68,20 @@ make_mpi_fixture <- function() {
       stringsAsFactors = FALSE
     ),
 
+    ## Patient reported outcomes: longitudinal, one row per visit ------------
+    # Feeds the cognition, adl and mental domains, so the fixture reaches the
+    # five scored domains an MPI needs.
+    prom = data.frame(
+      export_psn = visits$export_psn,
+      mnpcvpid = visits$mnpcvpid,
+      pro_pc2r = rep(c(1, 3), each = 3),
+      pro_pc35r = rep(c(1, 3), each = 3),
+      pro_pc36r = rep(c(1, 3), each = 3),
+      eq5d_mob = rep(c(1, 5), each = 3),
+      eq5d_anx = rep(c(1, 5), each = 3),
+      stringsAsFactors = FALSE
+    ),
+
     ## Ward stays -------------------------------------------------------------
     # P1 spends 5 days on ward 1 between baseline and the 3M visit.
     eward = data.frame(
@@ -287,6 +301,36 @@ test_that("min_domains suppresses an MPI that rests on too little data", {
   result <- suppressWarnings(build_mpi_df(make_mpi_fixture(), min_domains = 8))
 
   expect_true(all(is.na(result$ecu_mpi)))
+  expect_true(all(is.na(result$ecu_mpi_cat)))
+})
+
+
+test_that("an MPI needs five scored domains by default", {
+
+  expect_equal(formals(build_mpi_df)$min_domains, 5)
+
+  # The fixture scores seven domains, biomarker being the unscorable one.
+  full <- suppressWarnings(build_mpi_df(make_mpi_fixture()))
+  expect_true(all(full$ecu_mpi_n_domains == 7))
+  expect_false(any(is.na(full$ecu_mpi)))
+
+  # Drop the patient reported outcomes and only four domains remain.
+  sparse_data <- make_mpi_fixture()
+  sparse_data$prom <- NULL
+  sparse <- suppressWarnings(build_mpi_df(sparse_data))
+
+  expect_true(all(sparse$ecu_mpi_n_domains == 4))
+  expect_true(all(is.na(sparse$ecu_mpi)))
+  expect_true(all(is.na(sparse$ecu_mpi_cat)))
+
+  # The domain scores themselves are still reported, so it stays visible why
+  # the MPI was withheld.
+  expect_false(any(is.na(sparse$ecu_mpi_comorbidity)))
+  expect_false(any(is.na(sparse$ecu_mpi_nutrition)))
+
+  # Lowering the threshold brings the same visits back.
+  relaxed <- suppressWarnings(build_mpi_df(sparse_data, min_domains = 4))
+  expect_false(any(is.na(relaxed$ecu_mpi)))
 })
 
 
@@ -475,9 +519,12 @@ test_that("mpi_variable_report() shows how each variable is matched", {
 
   # Cross sectional comorbidity form.
   expect_equal(report$matching[report$variable == "gec_cv"], "cross-sectional")
-  # Longitudinal weight form.
+  # Longitudinal weight and patient reported outcome forms.
   expect_equal(report$matching[report$variable == "gec_weight"],
                "longitudinal")
+  expect_equal(report$matching[report$variable == "pro_pc2r"], "longitudinal")
   # Tables the fixture does not have.
-  expect_equal(report$matching[report$variable == "pro_pc2r"], "no table")
+  expect_equal(report$matching[report$variable == "cfs_seid_crit4"],
+               "no table")
+  expect_false(any(report$found[report$table == "stv2"]))
 })

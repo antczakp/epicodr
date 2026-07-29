@@ -725,6 +725,11 @@ categorize_mpi_ecu <- function(mpi) {
 #' ranges from 0 to 1. Domains without observed data are skipped, which is why
 #' `ecu_mpi_n_domains` reports how many domains a value rests on.
 #'
+#' Averaging over too few domains stops being meaningful, so a visit needs at
+#' least `min_domains` scored domains to get an MPI at all. Note that the
+#' biomarker domain carries no cut-offs and therefore always scores NA, which
+#' leaves seven scorable domains rather than eight.
+#'
 #' @details
 #' Domain variables are read at visit dates. Records carrying a start and end
 #' date contribute while `start <= visit date < end`, records carrying a visit
@@ -744,7 +749,11 @@ categorize_mpi_ecu <- function(mpi) {
 #'   [build_mpi_visit_df()].
 #' @param missing_values Numeric codes that stand for "missing".
 #' @param min_domains Minimum number of scored domains required for an MPI.
-#'   Visits below it get NA.
+#'   Visits below it get NA for `ecu_mpi` and `ecu_mpi_cat`, while their
+#'   individual domain scores and `ecu_mpi_n_domains` are still reported.
+#'   Defaults to 5, below which the mean rests on too little of the
+#'   assessment to be informative. Pass 1 to score every visit that has any
+#'   data at all.
 #'
 #' @return Data frame with one row per visit, the visit identification columns,
 #'   one `ecu_mpi_<domain>` column per domain, `ecu_mpi_n_domains`, `ecu_mpi`
@@ -755,7 +764,7 @@ build_mpi_df <- function(trial_data, pid = NULL, visitid = NULL,
                          scoring = epicodr::mpi_scoring,
                          visit_forms = mpi_default_visit_forms(),
                          missing_values = epicodr::missing_values_default,
-                         min_domains = 1) {
+                         min_domains = 5) {
 
   ids <- mpi_resolve_ids(trial_data, pid, visitid)
   pid <- ids$pid
