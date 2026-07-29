@@ -237,16 +237,22 @@ mpi_aggregate_records <- function(values, keys, key_levels, aggregate,
 }
 
 
-#' Carry values forward and backward within a patient
+#' Carry the last observed value forward within a patient
 #'
-#' Used for the nutrition domain, where height and weight are typically
-#' recorded once but the resulting BMI applies to every visit of the patient.
+#' A visit keeps the most recent earlier measurement until a new one is
+#' recorded, from which point that value applies. Visits before the first
+#' measurement stay missing: a later value says nothing about an earlier
+#' visit.
+#'
+#' Reserved for quantities that are stable or change slowly, which in the MPI
+#' means height and weight. It must not be used for the assessment scales,
+#' where carrying a value across visits would invent an observation.
 #'
 #' @param x Numeric vector, ordered by visit date within patient.
 #' @param patient Patient identifier of each element.
 #' @return Numeric vector of the same length.
 #' @noRd
-mpi_fill_within_patient <- function(x, patient) {
+mpi_carry_forward <- function(x, patient) {
 
   if (length(x) != length(patient)) {
     x <- rep(x, length.out = length(patient))
@@ -258,12 +264,13 @@ mpi_fill_within_patient <- function(x, patient) {
     if (length(observed) == 0 || length(observed) == length(values)) {
       next
     }
-    # Nearest observed value: last one carried forward, first one carried back.
-    nearest <- vapply(seq_along(values), function(i) {
-      before <- observed[observed <= i]
-      if (length(before) > 0) before[length(before)] else observed[1]
-    }, numeric(1))
-    x[idx] <- values[nearest]
+    # Number of measurements taken at or before each visit. A visit with none
+    # keeps its NA, the rest take the most recent one.
+    preceding <- findInterval(seq_along(values), observed)
+    filled <- rep(NA_real_, length(values))
+    known <- preceding > 0
+    filled[known] <- values[observed[preceding[known]]]
+    x[idx] <- filled
   }
 
   return(x)
@@ -873,13 +880,20 @@ build_mpi_df <- function(trial_data, pid = NULL, visitid = NULL,
       ),
 
       bmi = {
-        # Height and weight are typically recorded once, so carry them to the
-        # remaining visits of the patient before deriving the BMI.
-        height <- mpi_fill_within_patient(
+        # Height and weight are recorded on separate forms, so they rarely
+        # share a visit. Carry each of them forward, which lets the BMI be
+        # derived from the most recent measurement of either. Height does not
+        # change, and a weight applies until the next one is recorded.
+        #
+        # Forward only: a visit before the first measurement stays missing,
+        # because a later weight says nothing about an earlier visit. This is
+        # confined to height and weight, the only quantities in the MPI stable
+        # enough to justify it.
+        height <- mpi_carry_forward(
           if ("gec_height" %in% names(values)) values$gec_height else NA_real_,
           visits$.patient
         )
-        weight <- mpi_fill_within_patient(
+        weight <- mpi_carry_forward(
           if ("gec_weight" %in% names(values)) values$gec_weight else NA_real_,
           visits$.patient
         )

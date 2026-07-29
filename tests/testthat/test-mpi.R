@@ -313,12 +313,60 @@ test_that("generic missing codes are masked", {
 })
 
 
-test_that("values are carried forward and backward within a patient", {
+test_that("values are carried forward but never backward", {
 
+  # A visit before the first measurement stays missing.
   x <- c(NA, 5, NA, NA, 7, NA)
   patient <- c("a", "a", "a", "b", "b", "b")
 
-  expect_equal(mpi_fill_within_patient(x, patient), c(5, 5, 5, 7, 7, 7))
+  expect_equal(mpi_carry_forward(x, patient), c(NA, 5, 5, NA, 7, 7))
+
+  # A new measurement takes over from the visit it was recorded at.
+  expect_equal(
+    mpi_carry_forward(c(80, NA, 60, NA), rep("a", 4)),
+    c(80, 80, 60, 60)
+  )
+
+  # Patients do not bleed into each other.
+  expect_equal(
+    mpi_carry_forward(c(80, NA, NA, 60), c("a", "a", "b", "b")),
+    c(80, 80, NA, 60)
+  )
+})
+
+
+test_that("a new weight takes over the nutrition score from its visit on", {
+
+  trial_data <- make_mpi_fixture()
+  # P1 is 1.80 m and weighs 85 kg at baseline, then 40 kg at the 12M visit.
+  trial_data$fuv1 <- rbind(
+    trial_data$fuv1,
+    data.frame(export_psn = "P1", mnpcvpid = "13", gec_weight = 40,
+               stringsAsFactors = FALSE)
+  )
+
+  result <- suppressWarnings(build_mpi_df(trial_data))
+  p1 <- result[result$export_psn == "P1", ]
+  p1 <- p1[order(p1$visit_date), ]
+
+  # BMI 26.2 at baseline, carried to the 3M visit, then 12.3 from 12M on.
+  expect_equal(p1$ecu_mpi_nutrition, c(0, 0, 1))
+})
+
+
+test_that("a visit before the first measurement has no BMI", {
+
+  trial_data <- make_mpi_fixture()
+  # Height and weight documented only at the 12M visit.
+  trial_data$bv1$mnpcvpid <- c("13", "23")
+  trial_data$fuv1$mnpcvpid <- c("13", "23")
+
+  result <- suppressWarnings(build_mpi_df(trial_data))
+  p1 <- result[result$export_psn == "P1", ]
+  p1 <- p1[order(p1$visit_date), ]
+
+  expect_true(all(is.na(p1$ecu_mpi_nutrition[1:2])))
+  expect_false(is.na(p1$ecu_mpi_nutrition[3]))
 })
 
 
