@@ -130,8 +130,15 @@ mpi_split_config <- function(x) {
 
 #' Resolve the variable holding an interval bound
 #'
-#' Uses the configured name when given, otherwise looks for the conventional
-#' "<variable>_start" / "<variable>_end" companion in the table.
+#' Uses the configured name when given. Otherwise the table is searched, first
+#' for the exact "<variable>_start" / "<variable>_end" companion and then for
+#' any column starting with "<variable>_st" / "<variable>_en".
+#'
+#' The prefix search reproduces what the original MPI script did. Interval
+#' bounds are not spelled consistently across the export, which is why they
+#' were searched for rather than listed: `emed_i` pairs `gec_med_i_start` with
+#' `med_i_end`, and only some of the bounds ever made it into the domain
+#' definition.
 #'
 #' @param configured Configured variable name or NA.
 #' @param variable Name of the variable the bound belongs to.
@@ -148,12 +155,27 @@ mpi_resolve_bound <- function(configured, variable, suffix, table_names) {
     return(NA_character_)
   }
 
-  candidate <- paste(variable, suffix, sep = "_")
-  if (candidate %in% table_names) {
-    return(candidate)
+  exact <- paste(variable, suffix, sep = "_")
+  if (exact %in% table_names) {
+    return(exact)
   }
 
-  return(NA_character_)
+  # "start" -> "<variable>_st", "end" -> "<variable>_en".
+  prefix <- paste0(variable, "_", substr(suffix, 1, 2))
+  matches <- table_names[startsWith(table_names, prefix)]
+
+  if (length(matches) == 0) {
+    return(NA_character_)
+  }
+
+  if (length(matches) > 1) {
+    warning(paste0("MPI: several candidates for the ", suffix, " of '",
+                   variable, "': ", paste(matches, collapse = ", "),
+                   ". Using '", matches[1],
+                   "'. Set the bound explicitly in `domains` to choose."))
+  }
+
+  return(matches[1])
 }
 
 
@@ -579,8 +601,10 @@ mpi_score_bmi <- function(bmi, cuts) {
 #' living at home (2) from institutional care (1), `resid` records the type of
 #' residence.
 #'
-#' Combinations the rules do not cover score NA. In particular a patient with
-#' `resid` in (2, 3) and a known `home` is not covered by the original rules.
+#' `resid` in (2, 3) cannot occur together with a known `home`: a patient who
+#' has a home is not in one of those residence types, so the combination is
+#' absent from the data rather than unhandled. It scores NA, as does any other
+#' combination the rules do not cover.
 #'
 #' @param home,home_adults,home_childr,resid Numeric vectors of equal length.
 #' @return Double vector of domain scores.
@@ -833,10 +857,17 @@ build_mpi_df <- function(trial_data, pid = NULL, visitid = NULL,
 #' @details
 #' A day is attributed to exactly one ward. Where ward stays overlap, the later
 #' record wins, so `ecu_rehosp` equals the sum of the `ecu_rehosp_<level>`
-#' columns. Ward stays with an incomplete start or end date cannot be placed on
-#' the timeline: the day counts of the affected patient become NA rather than
-#' silently dropping to zero. The vital status is derived from the date of
-#' death alone and stays usable in that case.
+#' columns.
+#'
+#' A patient who was not on a ward between the two visits gets a count of zero.
+#' Ward stays with an incomplete start or end date cannot be placed on the
+#' timeline, so they are skipped and the remaining stays of that patient are
+#' still counted. Because such a count is a lower bound rather than a complete
+#' one, the patient is marked in `ecu_rehosp_incomplete`. Counts are NA only
+#' when the ward table itself is missing from the export.
+#'
+#' The vital status is derived from the date of death alone, so it stays usable
+#' whatever the state of the ward records.
 #'
 #' @param trial_data A secuTrial data object.
 #' @param pid Column name of the patient ID in trial_data.
@@ -856,7 +887,7 @@ build_mpi_df <- function(trial_data, pid = NULL, visitid = NULL,
 #'
 #' @return Data frame with one row per follow-up visit, the visit
 #'   identification columns, `ecu_rehosp`, one `ecu_rehosp_<level>` column per
-#'   ward code, `ecu_death` and `ecu_death_date`.
+#'   ward code, `ecu_rehosp_incomplete`, `ecu_death` and `ecu_death_date`.
 #' @export
 build_mpi_outcome_df <- function(trial_data, pid = NULL, visitid = NULL,
                                  visits = NULL,
@@ -922,11 +953,13 @@ build_mpi_outcome_df <- function(trial_data, pid = NULL, visitid = NULL,
       stringsAsFactors = FALSE
     )
 
-    # Patients whose stays cannot be placed on the timeline.
+    # Stays that cannot be placed on the timeline are skipped, but the
+    # patients they belong to are flagged so the counts stay interpretable.
     broken <- is.na(ward_records$.start) | is.na(ward_records$.end)
     incomplete <- unique(ward_records$.patient[broken])
     ward_records <- ward_records[!broken, , drop = FALSE]
 
+    # A patient without a countable stay has not been on a ward: zero days.
     outcome[, ] <- 0
 
     if (nrow(ward_records) > 0) {
@@ -976,16 +1009,13 @@ build_mpi_outcome_df <- function(trial_data, pid = NULL, visitid = NULL,
       }
     }
 
-    # Day counts of patients with unusable ward dates are lower bounds, so they
-    # are reported as unknown.
-    if (length(incomplete) > 0) {
-      outcome[target$.patient %in% incomplete, ] <- NA_real_
-    }
-
   } else if (nrow(target) > 0) {
     warning(paste0("build_mpi_outcome_df(): table '", ward_table,
                    "' or its variables are missing. Ward days are NA."))
   }
+
+  # Day counts of a patient with an unusable ward date are lower bounds.
+  outcome$ecu_rehosp_incomplete <- target$.patient %in% incomplete
 
   ## Vital status -------------------------------------------------------------
   death_date <- rep(as.Date(NA), nrow(target))
@@ -1021,6 +1051,100 @@ build_mpi_outcome_df <- function(trial_data, pid = NULL, visitid = NULL,
       stringsAsFactors = FALSE
     )
   )
+  rownames(result) <- NULL
+
+  return(result)
+}
+
+
+#' Report how the MPI variables resolve against an export
+#'
+#' @description
+#' Shows, for every variable of the domain definition, whether it was found in
+#' the export, how its records are matched to visits, and which variables were
+#' picked up as its validity interval.
+#'
+#' @details
+#' Interval bounds are searched for rather than listed, because the export does
+#' not spell them consistently. Use this function to confirm that the intended
+#' bounds were found before trusting the domain scores, in particular for the
+#' medication and living situation domains.
+#'
+#' @param trial_data A secuTrial data object.
+#' @param pid Column name of the patient ID in trial_data.
+#' @param visitid Column name of the visit ID in trial_data.
+#' @param domains Domain definition, see [mpi_domains].
+#'
+#' @return Data frame with one row per domain variable and the columns
+#'   `domain`, `table`, `variable`, `found`, `matching`, `start`, `end` and
+#'   `companions`. `matching` is one of "interval", "longitudinal",
+#'   "cross-sectional", "no table" or "no variable".
+#' @export
+mpi_variable_report <- function(trial_data, pid = NULL, visitid = NULL,
+                                domains = epicodr::mpi_domains) {
+
+  if (!("id_names" %in% names(trial_data$export_options))) {
+    trial_data <- set_id_names(trial_data)
+  }
+
+  if (is.null(pid)) pid <- trial_data$export_options$id_names$pid
+  if (is.null(visitid)) visitid <- trial_data$export_options$id_names$visitid
+
+  rows <- lapply(seq_len(nrow(domains)), function(i) {
+
+    config <- domains[i, ]
+    form <- trial_data[[config$table]]
+
+    empty <- data.frame(
+      domain = config$domain, table = config$table, variable = config$variable,
+      found = FALSE, matching = "no table",
+      start = NA_character_, end = NA_character_, companions = NA_character_,
+      stringsAsFactors = FALSE
+    )
+
+    if (is.null(form)) {
+      return(empty)
+    }
+
+    form_names <- names(form)
+
+    if (!(config$variable %in% form_names)) {
+      empty$matching <- "no variable"
+      return(empty)
+    }
+
+    start_var <- suppressWarnings(
+      mpi_resolve_bound(config$start, config$variable, "start", form_names)
+    )
+    end_var <- suppressWarnings(
+      mpi_resolve_bound(config$end, config$variable, "end", form_names)
+    )
+
+    matching <- if (!is.na(start_var) || !is.na(end_var)) {
+      "interval"
+    } else if (visitid %in% form_names) {
+      "longitudinal"
+    } else {
+      "cross-sectional"
+    }
+
+    companions <- mpi_split_config(config$companions)
+    companions <- companions[companions %in% form_names]
+
+    data.frame(
+      domain = config$domain, table = config$table, variable = config$variable,
+      found = TRUE, matching = matching,
+      start = start_var, end = end_var,
+      companions = if (length(companions) > 0) {
+        paste(companions, collapse = ",")
+      } else {
+        NA_character_
+      },
+      stringsAsFactors = FALSE
+    )
+  })
+
+  result <- do.call(rbind, rows)
   rownames(result) <- NULL
 
   return(result)

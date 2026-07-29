@@ -50,7 +50,7 @@ variable in `ward_table`.}
 \value{
 Data frame with one row per follow-up visit, the visit
   identification columns, `ecu_rehosp`, one `ecu_rehosp_<level>` column per
-  ward code, `ecu_death` and `ecu_death_date`.
+  ward code, `ecu_rehosp_incomplete`, `ecu_death` and `ecu_death_date`.
 }
 \description{
 Derives days spent on a ward and vital status between the baseline visit and
@@ -59,8 +59,15 @@ each follow-up visit.
 \details{
 A day is attributed to exactly one ward. Where ward stays overlap, the later
 record wins, so `ecu_rehosp` equals the sum of the `ecu_rehosp_<level>`
-columns. Ward stays with an incomplete start or end date cannot be placed on
-the timeline: the day counts of the affected patient become NA rather than
-silently dropping to zero. The vital status is derived from the date of
-death alone and stays usable in that case.
+columns.
+
+A patient who was not on a ward between the two visits gets a count of zero.
+Ward stays with an incomplete start or end date cannot be placed on the
+timeline, so they are skipped and the remaining stays of that patient are
+still counted. Because such a count is a lower bound rather than a complete
+one, the patient is marked in `ecu_rehosp_incomplete`. Counts are NA only
+when the ward table itself is missing from the export.
+
+The vital status is derived from the date of death alone, so it stays usable
+whatever the state of the ward records.
 }

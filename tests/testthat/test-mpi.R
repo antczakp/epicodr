@@ -318,15 +318,90 @@ test_that("death is only reported from the visit it happened before", {
 })
 
 
-test_that("ward stays with an incomplete date are reported as unknown", {
+test_that("no rehospitalisation is zero, not NA", {
+
+  result <- suppressWarnings(build_mpi_outcome_df(make_mpi_fixture()))
+
+  # P2 never went to a ward.
+  expect_equal(unique(result$ecu_rehosp[result$export_psn == "P2"]), 0)
+  expect_false(any(is.na(result$ecu_rehosp)))
+  expect_false(any(result$ecu_rehosp_incomplete))
+})
+
+
+test_that("an incomplete ward stay is skipped but the patient is flagged", {
 
   trial_data <- make_mpi_fixture()
-  trial_data$eward$ward_end <- NA
+  # A second stay whose end date was never documented.
+  trial_data$eward <- rbind(
+    trial_data$eward,
+    data.frame(export_psn = "P1", gec_ward = 4,
+               ward_start = "20210310", ward_end = NA,
+               stringsAsFactors = FALSE)
+  )
 
   result <- suppressWarnings(build_mpi_outcome_df(trial_data))
-  p1 <- result[result$export_psn == "P1", ]
+  p1_3m <- result[result$export_psn == "P1" &
+                    result$mnpvislabel == "3M Follow-Up", ]
 
-  expect_true(all(is.na(p1$ecu_rehosp)))
+  # The countable stay still contributes its 5 days.
+  expect_equal(p1_3m$ecu_rehosp, 5)
+  expect_true(p1_3m$ecu_rehosp_incomplete)
+
+  # P2 is unaffected.
+  expect_false(any(result$ecu_rehosp_incomplete[result$export_psn == "P2"]))
+
   # The vital status does not depend on the ward timeline.
   expect_false(any(is.na(result$ecu_death)))
+})
+
+
+test_that("interval bounds are found by prefix when they are spelled apart", {
+
+  # The export pairs a "gec_..._start" with a bare "..._end", which is why the
+  # original script searched for bounds instead of listing them.
+  expect_equal(mpi_resolve_bound(NA, "home", "start",
+                                 c("home", "home_startdate")),
+               "home_startdate")
+  expect_equal(mpi_resolve_bound(NA, "home", "end",
+                                 c("home", "home_enddate")),
+               "home_enddate")
+
+  # An exact companion still wins over a prefix match.
+  expect_equal(mpi_resolve_bound(NA, "home", "start",
+                                 c("home_startdate", "home_start")),
+               "home_start")
+
+  # Nothing to find.
+  expect_equal(mpi_resolve_bound(NA, "home", "start", c("home", "resid")),
+               NA_character_)
+
+  # A configured name is used as given.
+  expect_equal(
+    mpi_resolve_bound("med_i_end", "med_ih_drug", "end",
+                      c("med_ih_drug", "med_i_end")),
+    "med_i_end"
+  )
+})
+
+
+test_that("mpi_variable_report() shows how each variable is matched", {
+
+  report <- suppressWarnings(mpi_variable_report(make_mpi_fixture()))
+
+  expect_equal(nrow(report), nrow(epicodr::mpi_domains))
+
+  home <- report[report$variable == "home", ]
+  expect_true(home$found)
+  expect_equal(home$matching, "interval")
+  expect_equal(home$start, "home_start")
+  expect_equal(home$companions, "home_adults,home_childr")
+
+  # Cross sectional comorbidity form.
+  expect_equal(report$matching[report$variable == "gec_cv"], "cross-sectional")
+  # Longitudinal weight form.
+  expect_equal(report$matching[report$variable == "gec_weight"],
+               "longitudinal")
+  # Tables the fixture does not have.
+  expect_equal(report$matching[report$variable == "pro_pc2r"], "no table")
 })
