@@ -126,6 +126,36 @@ test_that("sum cut-offs are inclusive lower bounds", {
 })
 
 
+test_that("the shipped cut-offs map sums to scores as specified", {
+
+  # A cut-off is the inclusive lower bound of its score: below the 0.5
+  # cut-off scores 0, reaching it scores 0.5, reaching the 1 cut-off scores 1.
+  # Locked against the shipped table so the rule cannot drift.
+  score_for <- function(domain, sums) {
+    row <- epicodr::mpi_scoring[epicodr::mpi_scoring$domain == domain, ]
+    cuts <- stats::setNames(
+      as.numeric(c(row$cut_0, row$cut_0.5, row$cut_1)),
+      c("0", "0.5", "1")
+    )
+    mpi_score_sum(data.frame(a = sums), cuts)
+  }
+
+  # cut-offs 0 / 1 / 3
+  expect_equal(score_for("comorbidity", 0:4), c(0, 0.5, 0.5, 1, 1))
+  # cut-offs 0 / 4 / 7
+  expect_equal(score_for("cognition", c(0, 3, 4, 6, 7, 9)),
+               c(0, 0, 0.5, 0.5, 1, 1))
+  expect_equal(score_for("adl", c(0, 3, 4, 6, 7, 9)),
+               c(0, 0, 0.5, 0.5, 1, 1))
+  # cut-offs 0 / 12 / 15
+  expect_equal(score_for("mental", c(0, 11, 12, 14, 15, 20)),
+               c(0, 0, 0.5, 0.5, 1, 1))
+  # cut-offs 0 / 2 / 4
+  expect_equal(score_for("medications", c(0, 1, 2, 3, 4, 9)),
+               c(0, 0, 0.5, 0.5, 1, 1))
+})
+
+
 test_that("a domain without a single observed variable scores NA, not 0", {
 
   cuts <- c("0" = 0, "0.5" = 1, "1" = 3)
