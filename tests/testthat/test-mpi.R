@@ -238,6 +238,73 @@ test_that("multi select cells collapse to their highest code", {
 })
 
 
+test_that("labelled factors are read as their level codes", {
+
+  # An ordered scale whose levels are labels: the position of a level is the
+  # code. as.character() would turn all of these into NA.
+  eq5d_mob <- factor(
+    c("Keine Probleme", "Grosse Probleme", NA, "Leichte Probleme"),
+    levels = c("Keine Probleme", "Leichte Probleme", "Maessige Probleme",
+               "Grosse Probleme", "Extreme Probleme"),
+    ordered = TRUE
+  )
+  expect_equal(mpi_as_numeric(eq5d_mob), c(1, 4, NA, 2))
+
+  # Levels that are the codes themselves keep their value, not their position.
+  coded <- factor(c("0", "3", "7"), levels = c("0", "3", "7"))
+  expect_equal(mpi_as_numeric(coded), c(0, 3, 7))
+
+  # An unordered factor is treated the same way, since the export orders its
+  # value labels by code.
+  expect_equal(mpi_as_numeric(factor(c("nein", "ja"),
+                                     levels = c("nein", "ja"))),
+               c(1, 2))
+})
+
+
+test_that("labelled vectors are read as their underlying codes", {
+
+  skip_if_not_installed("haven")
+
+  x <- haven::labelled(c(1, 5, NA), labels = c(none = 1, extreme = 5))
+  expect_equal(mpi_as_numeric(x), c(1, 5, NA))
+})
+
+
+test_that("a domain of label-coded factors is scored, not dropped", {
+
+  # The reported failure: the variables of a domain arrive as labelled
+  # factors, so the domain scored NA where it should have carried a score.
+  trial_data <- make_mpi_fixture()
+  as_label <- function(x) {
+    levels <- c("keine", "leicht", "maessig", "gross", "extrem")
+    factor(levels[x], levels = levels, ordered = TRUE)
+  }
+  trial_data$prom$eq5d_anx <- as_label(trial_data$prom$eq5d_anx)
+  trial_data$prom$eq5d_mob <- as_label(trial_data$prom$eq5d_mob)
+
+  result <- suppressWarnings(build_mpi_df(trial_data))
+  reference <- suppressWarnings(build_mpi_df(make_mpi_fixture()))
+
+  expect_false(any(is.na(result$ecu_mpi_mental)))
+  expect_false(any(is.na(result$ecu_mpi_adl)))
+
+  # Reading the levels recovers exactly the codes the fixture started from.
+  expect_equal(result$ecu_mpi_mental, reference$ecu_mpi_mental)
+  expect_equal(result$ecu_mpi_adl, reference$ecu_mpi_adl)
+  expect_equal(result$ecu_mpi, reference$ecu_mpi)
+})
+
+
+test_that("a column that cannot be read as a code is reported", {
+
+  trial_data <- make_mpi_fixture()
+  trial_data$prom$eq5d_anx <- "keine Angabe"
+
+  expect_warning(build_mpi_df(trial_data), "eq5d_anx")
+})
+
+
 test_that("generic missing codes are masked", {
 
   expect_equal(mpi_mask_missing(c(0, 1, -1, 99), c(-1, 88, 98, 99)),

@@ -34,12 +34,32 @@
 #' @noRd
 mpi_as_numeric <- function(x) {
 
-  if (is.numeric(x) || is.logical(x)) {
+  if (is.logical(x)) {
+    return(as.numeric(x))
+  }
+
+  # Labelled variables keep their codes underneath the labels.
+  if (inherits(x, "haven_labelled")) {
+    return(as.numeric(unclass(x)))
+  }
+
+  if (is.numeric(x)) {
     return(as.numeric(x))
   }
 
   if (is.factor(x)) {
-    x <- as.character(x)
+    # A level is either the code itself ("1", "2") or the label that belongs
+    # to it. Use the codes where they parse. Otherwise fall back to the level
+    # order: the categorical scales of the export are ordered factors, so the
+    # position of a level is its code. as.character() would discard that and
+    # turn every labelled variable into NA.
+    level_codes <- suppressWarnings(as.numeric(levels(x)))
+    if (!any(grepl("|", levels(x), fixed = TRUE))) {
+      if (!any(is.na(level_codes))) {
+        return(level_codes[as.integer(x)])
+      }
+      return(as.numeric(as.integer(x)))
+    }
   }
 
   x <- as.character(x)
@@ -510,6 +530,19 @@ mpi_collect_variable <- function(trial_data, config, visits, pid, visitid,
     )
   })
   names(values) <- available
+
+  # A variable that holds data but reads as missing throughout is almost
+  # always a coding problem rather than an empty column, so say so instead of
+  # letting the domain quietly lose a variable.
+  for (variable in available) {
+    if (length(values[[variable]]) > 0 &&
+        all(is.na(values[[variable]])) &&
+        any(!is.na(matched[[variable]]))) {
+      warning(paste0("MPI: '", variable, "' in table '", config$table,
+                     "' holds data but could not be read as a numeric code. ",
+                     "It is treated as missing."))
+    }
+  }
 
   return(values)
 }
