@@ -5,7 +5,7 @@
 \alias{missing_values_default}
 \title{Default numeric values generally considered as missing value.}
 \format{
-## `Default numercial missing values`
+## `Default numerical missing values`
 }
 \source{
 numeric value(s) that are standardly used for missing values.

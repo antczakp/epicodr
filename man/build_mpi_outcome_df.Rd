@@ -12,8 +12,6 @@ build_mpi_outcome_df(
   visit_forms = mpi_default_visit_forms(),
   ward_table = "eward",
   ward_vars = c(ward = "gec_ward", start = "ward_start", end = "ward_end"),
-  death_table = "fv2_6",
-  death_var = "death_date",
   baseline_label = "Baseline",
   follow_up_labels = c("3M Follow-Up", "12M Follow-Up"),
   ward_levels = 1:7
@@ -37,10 +35,6 @@ build_mpi_outcome_df(
 \item{ward_vars}{Named character vector naming the ward, start and end
 variable in `ward_table`.}
 
-\item{death_table}{Name of the table holding the date of death.}
-
-\item{death_var}{Name of the date of death variable in `death_table`.}
-
 \item{baseline_label}{Visit label of the baseline visit.}
 
 \item{follow_up_labels}{Visit labels the outcomes are derived for.}
@@ -50,11 +44,12 @@ variable in `ward_table`.}
 \value{
 Data frame with one row per follow-up visit, the visit
   identification columns, `ecu_rehosp`, one `ecu_rehosp_<level>` column per
-  ward code, `ecu_rehosp_incomplete`, `ecu_death` and `ecu_death_date`.
+  ward code and `ecu_rehosp_incomplete`.
 }
 \description{
-Derives days spent on a ward and vital status between the baseline visit and
-each follow-up visit.
+Derives days spent on a ward between the baseline visit and each follow-up
+visit. The vital status is derived per patient by [build_mpi_vital_df()],
+the ward days per patient and ward group by [build_mpi_rehosp_df()].
 }
 \details{
 A day is attributed to exactly one ward. Where ward stays overlap, the later
@@ -67,7 +62,4 @@ timeline, so they are skipped and the remaining stays of that patient are
 still counted. Because such a count is a lower bound rather than a complete
 one, the patient is marked in `ecu_rehosp_incomplete`. Counts are NA only
 when the ward table itself is missing from the export.
-
-The vital status is derived from the date of death alone, so it stays usable
-whatever the state of the ward records.
 }

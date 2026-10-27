@@ -141,7 +141,9 @@ calculate_bmi <- function(mass, height) {
   # TODO: rewrite to ifelse
   cm_thrsh <- 3
   mean_height <- mean(height, na.rm = TRUE)
-  if (mean_height > cm_thrsh) {
+  # An all-missing height leaves no mean to judge the unit by, so leave it
+  # alone: the BMI is missing either way, and mean() would return NaN here.
+  if (!is.na(mean_height) && mean_height > cm_thrsh) {
     msg <- paste(
       "`height` unit is probably centimeters;",
       "converted to meters before computation."

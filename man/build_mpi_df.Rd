@@ -12,7 +12,17 @@ build_mpi_df(
   scoring = epicodr::mpi_scoring,
   visit_forms = mpi_default_visit_forms(),
   missing_values = epicodr::missing_values_default,
-  min_domains = 5
+  min_domains = 5,
+  birthdate_table = "bv1",
+  birthdate_var = "gec_birthdate",
+  sex_table = "bv1",
+  sex_var = "gec_gender",
+  ethnicity_table = "bv1",
+  ethnicity_var = "gec_ethnicity",
+  origin_table = "bv1",
+  origin_var = "origin",
+  palliative_table = "bv1",
+  palliative_var = "palliative"
 )
 }
 \arguments{
@@ -37,11 +47,39 @@ individual domain scores and `ecu_mpi_n_domains` are still reported.
 Defaults to 5, below which the mean rests on too little of the
 assessment to be informative. Pass 1 to score every visit that has any
 data at all.}
+
+\item{birthdate_table}{Name of the table holding the date of birth.}
+
+\item{birthdate_var}{Name of the date of birth variable in
+`birthdate_table`. Its `.date` companion is used where `dates_tsExport()`
+created one.}
+
+\item{sex_table}{Name of the table holding the sex.}
+
+\item{sex_var}{Name of the sex variable in `sex_table`. Its `.factor`
+companion is used where `factorize_tsExport()` created one.}
+
+\item{ethnicity_table}{Name of the table holding the ethnicity.}
+
+\item{ethnicity_var}{Name of the ethnicity variable in `ethnicity_table`.
+Its `.factor` companion is used where `factorize_tsExport()` created one.}
+
+\item{origin_table}{Name of the table holding the origin.}
+
+\item{origin_var}{Name of the origin variable in `origin_table`. Its
+`.factor` companion is used where `factorize_tsExport()` created one.}
+
+\item{palliative_table}{Name of the table holding the palliative status.}
+
+\item{palliative_var}{Name of the palliative status variable in
+`palliative_table`. Its `.factor` companion is used where
+`factorize_tsExport()` created one.}
 }
 \value{
 Data frame with one row per visit, the visit identification columns,
-  one `ecu_mpi_<domain>` column per domain, `ecu_mpi_n_domains`, `ecu_mpi`
-  and `ecu_mpi_cat`.
+  `ecu_age`, `ecu_sex`, `ecu_ethnicity`, `ecu_origin`, `ecu_palliative`, one
+  `ecu_mpi_<domain>` column per domain, `ecu_mpi_n_domains`, `ecu_mpi` and
+  `ecu_mpi_cat`.
 }
 \description{
 Computes the MPI and its domain scores for every visit of every patient.
@@ -65,4 +103,15 @@ every visit of the patient.
 Codes listed in `missing_values` are read as missing before a domain is
 summed. They are not applied to the nutrition domain, where 88 or 99 are
 plausible measurements. Pass `numeric(0)` to switch this off.
+
+`ecu_age` is the age in decimal years on the visit date, derived from the
+date of birth for every visit, so it advances between visits rather than on
+birthdays only. Use `floor(ecu_age)` for completed years. The age at
+baseline is the value of the baseline row.
+
+`ecu_sex`, `ecu_ethnicity`, `ecu_origin` and `ecu_palliative` are recorded
+once per patient and carried on every visit. They are the factors
+`gec_gender.factor`, `gec_ethnicity.factor`, `origin.factor` and
+`palliative.factor` where the export was factorized and the raw codes
+otherwise.
 }

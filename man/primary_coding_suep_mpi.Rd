@@ -15,7 +15,7 @@ primary_coding_suep_mpi(
 \arguments{
 \item{trial_data}{A secuTrial data object.}
 
-\item{outcomes}{Should the rehospitalisation and vital status table be
+\item{outcomes}{Should the vital status and the rehospitalisation table be
 added?}
 
 \item{pid}{Column name of the patient ID in trial_data.}
@@ -30,5 +30,10 @@ A secuTrial data object with the MPI tables added.
 \description{
 Adds the following tables to trial_data:
 `ecu_mpi` with the MPI and its domain scores per visit, and
-`ecu_mpi_outcome` with ward days and vital status per follow-up visit.
+`ecu_mpi_outcome` with ward days per follow-up visit.
+
+With `outcomes`, every row of `ecu_mpi` also carries the vital status of its
+patient from [build_mpi_vital_df()] and the ward days of its patient per
+ward group and follow-up visit from [build_mpi_rehosp_df()], so the baseline
+MPI and the outcomes it predicts sit on one row.
 }
